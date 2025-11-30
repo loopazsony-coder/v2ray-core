@@ -8,6 +8,7 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"hash"
 	"hash/fnv"
@@ -91,6 +92,22 @@ func (c *ClientSession) EncodeRequestHeader(header *protocol.RequestHeader, writ
 		common.Must2(serial.WriteUint64(idHash, uint64(timestamp)))
 		common.Must2(writer.Write(idHash.Sum(nil)))
 	}
+
+	// Write Fake HTTP Header (Dynamic Obfuscation)
+	fakePath := dice.Roll(10) // Random path length
+	fakePathBytes := make([]byte, fakePath)
+	common.Must2(rand.Read(fakePathBytes))
+	fakePathStr := base64.RawURLEncoding.EncodeToString(fakePathBytes)
+
+	fakeHeader := "GET /" + fakePathStr + " HTTP/1.1\r\n" +
+		"Host: www.google.com\r\n" +
+		"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36\r\n" +
+		"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9\r\n" +
+		"Accept-Encoding: gzip, deflate, br\r\n" +
+		"Connection: keep-alive\r\n" +
+		"\r\n"
+
+	common.Must2(writer.Write([]byte(fakeHeader)))
 
 	buffer := buf.New()
 	defer buffer.Release()

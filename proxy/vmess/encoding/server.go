@@ -144,6 +144,31 @@ func (s *ServerSession) DecodeRequestHeader(reader io.Reader) (*protocol.Request
 		return nil, newError("failed to initialize drainer").Base(err)
 	}
 
+	// Read and discard Fake HTTP Header
+	// We look for \r\n\r\n sequence
+	// Limit search to 4KB to prevent memory exhaustion
+	headerBuf := make([]byte, 1)
+	searchBuf := make([]byte, 0, 4096)
+	foundEnd := false
+
+	for i := 0; i < 4096; i++ {
+		if _, err := io.ReadFull(reader, headerBuf); err != nil {
+			return nil, newError("failed to read fake header").Base(err)
+		}
+		searchBuf = append(searchBuf, headerBuf[0])
+		if len(searchBuf) >= 4 {
+			tail := searchBuf[len(searchBuf)-4:]
+			if tail[0] == '\r' && tail[1] == '\n' && tail[2] == '\r' && tail[3] == '\n' {
+				foundEnd = true
+				break
+			}
+		}
+	}
+
+	if !foundEnd {
+		return nil, newError("invalid fake header: end of header not found")
+	}
+
 	drainConnection := func(e error) error {
 		// We read a deterministic generated length of data before closing the connection to offset padding read pattern
 		drainer.AcknowledgeReceive(int(buffer.Len()))
